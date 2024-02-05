@@ -1,71 +1,43 @@
-if not lib.checkDependency('ox_lib', '3.14.0') then print('Update ox_lib to v3.14.0 or newer!') return end
+if not lib.checkDependency('ox_lib', '3.14.0') then print('ox_lib v3.14 or newer required!') return end
 
-local Utils = require 'modules.utils'
-local Vehicle = require 'modules.class.vehicle'
+local Handler = require 'modules.handler'
 local Settings = lib.load('data.vehicle')
 
-local fuelscript = Utils.Detect.Fuel()
-local speedunit = Settings.units == 'mph' and 2.23694 or 3.6
-local listening = false
+local speedUnit = Settings.units == 'mph' and 2.23694 or 3.6
 
-local function startThreads()
-    listening = true
-    local vehEntity = Vehicle:getEntity()
-    local vehClass = Vehicle:getClass()
-    local airborne, torqueReduction = false, false
-    local speedBuffer, healthBuffer, bodyBuffer, roll = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0
+local function startThreads(vehicle)
+    if not vehicle then return end
 
-    function startTorqueReduction()
-        torqueReduction = true
-        CreateThread(function()
-
-            while Vehicle:getSeat() == -1 do
-
-                -- Update vehicle torque
-                if healthBuffer[1] < 500 then
-                    local newtorque = (healthBuffer[1] + 500) / 1100
-                    SetVehicleCheatPowerIncrease(vehEntity, newtorque)
-                else
-                    torqueReduction = false
-                    break
-                end
-    
-                Wait(1)
-            end
-
-            torqueReduction = false
-        end)
-    end
+    local class = GetVehicleClass(vehicle) or false
+    local speedBuffer, healthBuffer, bodyBuffer, roll, airborne = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0, false
 
     CreateThread(function()
-        while Vehicle:getSeat() == -1 do
-            if Vehicle:getEntity() ~= vehEntity then
-                vehEntity = Vehicle:getEntity()
-            end
+        while cache.vehicle and cache.seat == -1 do
 
-            bodyBuffer[1] = GetVehicleBodyHealth(vehEntity)
-            healthBuffer[1] = GetVehicleEngineHealth(vehEntity)
-            speedBuffer[1] = GetEntitySpeed(vehEntity) * speedunit
+            -- Retrieve latest vehicle data
+            bodyBuffer[1] = GetVehicleBodyHealth(vehicle)
+            healthBuffer[1] = GetVehicleEngineHealth(vehicle)
+            speedBuffer[1] = GetEntitySpeed(vehicle) * speedUnit
 
             -- Driveability handler (health, fuel)
-            local fuelLevel = GetVehicleFuelLevel(vehEntity)
+            local fuelLevel = GetVehicleFuelLevel(vehicle)
             if healthBuffer[1] <= 0 or fuelLevel <= 6.4 then
-                if IsVehicleDriveable(vehEntity, true) then
-                    SetVehicleUndriveable(vehEntity, true)
+                if IsVehicleDriveable(vehicle, true) then
+                    SetVehicleUndriveable(vehicle, true)
                 end
             end
 
             -- Prevent rotation controls while flipped/airborne
-            if Settings.regulated[vehClass] then
+            if Settings.regulated[class] then
                 if speedBuffer[1] < 2.0 then
                     if airborne then airborne = false end
-                    roll = GetEntityRoll(vehEntity)
+                    roll = GetEntityRoll(vehicle)
                 else
-                    airborne = IsEntityInAir(vehEntity)
+                    airborne = IsEntityInAir(vehicle)
                 end
 
                 if (roll > 75.0 or roll < -75.0) or airborne then
-                    SetVehicleOutOfControl(vehEntity, false, false)
+                    SetVehicleOutOfControl(vehicle, false, false)
                 end
             end
 
@@ -74,48 +46,56 @@ local function startThreads()
             if bodyDiff >= 1 then
 
                 -- Calculate latest damage
-                local bodyDamage = bodyDiff * Settings.globalmultiplier * Settings.classmultiplier[vehClass]
+                local bodyDamage = bodyDiff * Settings.globalmultiplier * Settings.classmultiplier[class]
                 local vehicleHealth = healthBuffer[1] - bodyDamage
 
-                -- Engage torque reduction thread
-                if vehicleHealth < 500 then
-                    if not torqueReduction then
-                        startTorqueReduction()
-                    end
+                -- Torque reduction
+                if vehicleHealth < 500 and not Handler:isLimited() then
+                    Handler:setLimited(true)
+                    
+                    CreateThread(function()
+                        while cache.vehicle and healthBuffer[1] < 500 do
+                            local newtorque = (healthBuffer[1] + 500) / 1100
+                            SetVehicleCheatPowerIncrease(vehicle, newtorque)
+                            Wait(1)
+                        end
+            
+                        Handler:setLimited(false)
+                    end)
                 end
 
-                -- Update vehicle health
+                -- Update engine health
                 if vehicleHealth ~= healthBuffer[1] and vehicleHealth > 0 then
-                    SetVehicleEngineHealth(vehEntity, vehicleHealth)
+                    SetVehicleEngineHealth(vehicle, vehicleHealth)
                 elseif vehicleHealth ~= 0 then
-                    SetVehicleEngineHealth(vehEntity, 0.0) -- prevent negative engine health
+                    SetVehicleEngineHealth(vehicle, 0.0) -- prevent negative engine health
                 end
 
                 -- Prevent negative body health
                 if bodyBuffer[1] < 0 then
-                    SetVehicleBodyHealth(vehEntity, 0.0)
+                    SetVehicleBodyHealth(vehicle, 0.0)
                 end
 
                 -- Prevent negative tank health (explosion)
-                if GetVehiclePetrolTankHealth(vehEntity) < 0 then
-                    SetVehiclePetrolTankHealth(vehEntity, 0.0)
+                if GetVehiclePetrolTankHealth(vehicle) < 0 then
+                    SetVehiclePetrolTankHealth(vehicle, 0.0)
                 end
             end
 
-            -- Handle collision impact
+            -- Impact handler
             local speedDiff = speedBuffer[2] - speedBuffer[1]
             if speedDiff >= Settings.threshold.speed then
 
                 -- Handle wheel loss
                 if bodyDiff >= Settings.threshold.health then
                     local chance = math.random(0,1)
-                    BreakOffVehicleWheel(vehEntity, chance, true, false, true, false)
+                    BreakOffVehicleWheel(vehicle, chance, true, false, true, false)
                 end
 
                 -- Handle heavy impact
                 if speedDiff >= Settings.threshold.heavy then
-                    SetVehicleUndriveable(vehEntity, true)
-                    SetVehicleEngineHealth(vehEntity, 0.0) -- Disable vehicle completely
+                    SetVehicleUndriveable(vehicle, true)
+                    SetVehicleEngineHealth(vehicle, 0.0) -- Disable vehicle completely
                 end
             end
 
@@ -126,46 +106,39 @@ local function startThreads()
 
             Wait(100)
         end
-        
-        listening, airborne, torqueReduction = false, false, false
-        speedBuffer, healthBuffer, bodyBuffer, roll = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0
     end)
 end
 
-lib.onCache('vehicle', function(newVeh)
-    Vehicle:setEntity(newVeh)
-end)
-
-lib.onCache('seat', function(newSeat)
-	Vehicle:updateData(newSeat, seated)
-    if Utils.Player.Seated(newSeat) and newSeat == -1 then
-        if not listening then
-            startThreads()
-        end
+lib.onCache('seat', function(seat)
+    if not Handler:isActive() and seat == -1 then
+        Handler:setActive(true)
+        startThreads(cache.vehicle)
+    else
+        Handler:setActive(false)
     end
 end)
 
-AddEventHandler('onResourceStart', function(resource)
-    if resource ~= GetCurrentResourceName() then return end
-    local veh, seat = Utils.Player.Data()
-
-    Vehicle = Vehicle:new({
-        ref = veh,
-        class = veh and GetVehicleClass(veh) or false,
-        seat = seat,
-        active = Utils.Player.Seated(seat)
-    })
-
-    startThreads()
+lib.callback.register('vehiclehandler:adminfuel', function(newlevel)
+    return Handler:adminfuel(newlevel)
 end)
 
-RegisterNetEvent('vehiclehandler:playerlogout', function()
-    Vehicle:resetData()
+lib.callback.register('vehiclehandler:adminwash', function()
+    return Handler:adminwash()
 end)
 
-RegisterNetEvent('vehiclehandler:client:adminfix', function()
-    if not cache.ped then return end
-    if Vehicle:isActive() or IsPedInAnyPlane(cache.ped) then
-        Utils.Vehicle.Repair(Vehicle:getEntity(), fuelscript)
-    end
+lib.callback.register('vehiclehandler:adminfix', function()
+    return Handler:adminfix()
+end)
+
+lib.callback.register('vehiclehandler:wash', function()
+    return Handler:basicwash()
+end)
+
+lib.callback.register('vehiclehandler:basicfix', function(fixtype)
+    return Handler:basicfix(fixtype)
+end)
+
+CreateThread(function()
+    Handler = Handler:new({ private = {} })
+    startThreads(cache.vehicle)
 end)

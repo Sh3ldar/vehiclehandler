@@ -1,13 +1,15 @@
 fx_version  'cerulean'
 game        'gta5'
+lua54       'yes'
 
 name        'Vehicle Handler'
-description 'FiveM vehicle collision/damage handling.'
+description 'Vehicle collision/damage handling for FiveM.'
 author      'QuantumMalice'
-version     '1.0.0'
+version     '1.0.1'
 
-dependencies {
-    'ox_lib',
+files {
+    'data/*.lua',
+    'modules/handler.lua',
 }
 
 shared_scripts {
@@ -21,11 +23,3 @@ client_scripts {
 server_scripts {
     'server.lua',
 }
-
-files {
-    'data/*.lua',
-    'modules/*.lua',
-    'modules/class/*.lua',
-}
-
-lua54 'yes'
