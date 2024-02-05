@@ -13,7 +13,7 @@
 
 ## __Dependencies:__
 * [ox_lib](https://github.com/overextended/ox_lib)
-* [ox_inventory](https://github.com/overextended/ox_inventory) *Optional*
+* [ox_inventory](https://github.com/overextended/ox_inventory) *(Optional)*
 
 ## ***ox_inventory***:
 ```lua
