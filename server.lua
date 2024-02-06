@@ -18,7 +18,7 @@ if GetResourceState('ox_inventory') == 'started' then
             local src = inventory.id
             if not src then return false end
 
-            local success = lib.callback.await('vehiclehandler:basicfix', src, false, 'smallkit')
+            local success = lib.callback.await('vehiclehandler:basicfix', src, 'smallkit')
             if success then return end
 
             return false
@@ -30,7 +30,7 @@ if GetResourceState('ox_inventory') == 'started' then
             local src = inventory.id
             if not src then return false end
 
-            local success = lib.callback.await('vehiclehandler:basicfix', src, false, 'bigkit')
+            local success = lib.callback.await('vehiclehandler:basicfix', src, 'bigkit')
             if success then return end
 
             return false
