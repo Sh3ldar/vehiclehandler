@@ -7,10 +7,13 @@ local speedUnit = Settings.units == 'mph' and 2.23694 or 3.6
 
 local function startThreads(vehicle)
     if not vehicle then return end
+    if Handler:isActive() then return end
+
+    Handler:setActive(true)
 
     local class = GetVehicleClass(vehicle) or false
     local speedBuffer, healthBuffer, bodyBuffer, roll, airborne = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0, false
-
+    
     CreateThread(function()
         while cache.vehicle and cache.seat == -1 do
 
@@ -24,6 +27,23 @@ local function startThreads(vehicle)
             if healthBuffer[1] <= 0 or fuelLevel <= 6.4 then
                 if IsVehicleDriveable(vehicle, true) then
                     SetVehicleUndriveable(vehicle, true)
+                end
+            end
+
+            -- Reduce torque after half-life
+            if not Handler:isLimited() then
+                if healthBuffer[1] < 500 then
+                    Handler:setLimited(true)
+                    
+                    CreateThread(function()
+                        while cache.vehicle and healthBuffer[1] < 500 do
+                            local newtorque = (healthBuffer[1] + 500) / 1100
+                            SetVehicleCheatPowerIncrease(vehicle, newtorque)
+                            Wait(1)
+                        end
+            
+                        Handler:setLimited(false)
+                    end)
                 end
             end
 
@@ -48,21 +68,6 @@ local function startThreads(vehicle)
                 -- Calculate latest damage
                 local bodyDamage = bodyDiff * Settings.globalmultiplier * Settings.classmultiplier[class]
                 local vehicleHealth = healthBuffer[1] - bodyDamage
-
-                -- Torque reduction
-                if vehicleHealth < 500 and not Handler:isLimited() then
-                    Handler:setLimited(true)
-                    
-                    CreateThread(function()
-                        while cache.vehicle and healthBuffer[1] < 500 do
-                            local newtorque = (healthBuffer[1] + 500) / 1100
-                            SetVehicleCheatPowerIncrease(vehicle, newtorque)
-                            Wait(1)
-                        end
-            
-                        Handler:setLimited(false)
-                    end)
-                end
 
                 -- Update engine health
                 if vehicleHealth ~= healthBuffer[1] and vehicleHealth > 0 then
@@ -106,15 +111,14 @@ local function startThreads(vehicle)
 
             Wait(100)
         end
+
+        Handler:setActive(false)
     end)
 end
 
 lib.onCache('seat', function(seat)
-    if not Handler:isActive() and seat == -1 then
-        Handler:setActive(true)
+    if seat == -1 then
         startThreads(cache.vehicle)
-    else
-        Handler:setActive(false)
     end
 end)
 
