@@ -144,5 +144,6 @@ end)
 
 CreateThread(function()
     Handler = Handler:new({ private = {} })
+    Wait(100)
     startThreads(cache.vehicle)
 end)
