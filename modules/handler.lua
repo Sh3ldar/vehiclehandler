@@ -3,11 +3,9 @@ local Settings = lib.load('data.vehicle')
 local Handler = lib.class('vehiclehandler')
 
 function Handler:init()
-    if GetResourceState('ox_fuel') == 'started' then
-        self.private.ox = true
-    else
-        self.private.ox = false
-    end
+    self.private.active = false
+    self.private.limited = false
+    self.private.ox = GetResourceState('ox_fuel') == 'started' and true or false
 end
 
 function Handler:isActive() return self.private.active end
