@@ -1,7 +1,9 @@
-if not lib.checkDependency('ox_lib', '3.14.0') then error('ox_lib v3.14 or newer required!') end
+if not lib.checkDependency('ox_lib', '3.16.2') then error('ox_lib v3.16.2 or newer required!') end
 lib.versionCheck("QuantumMalice/vehiclehandler")
 
 if GetResourceState('ox_inventory') == 'started' then
+    if not lib.checkDependency('ox_inventory', '2.38.1') then error('ox_inventory v2.38.1 or newer required!') end
+
     exports('cleaningkit', function(event, item, inventory, slot, data)
         if event == 'usingItem' then
             local src = inventory.id
