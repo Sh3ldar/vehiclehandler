@@ -32,18 +32,18 @@
     },
 
     ["tirekit"] = {
-		label = "Tire Kit",
-		weight = 250,
-		stack = true,
-		close = true,
-		description = "A nice toolbox with stuff to repair your tire",
-		client = {
-			image = "tirekit.png",
-		},
-		server = {
-			export = 'vehiclehandler.tirekit'
-		}
-	},
+        label = "Tire Kit",
+        weight = 250,
+        stack = true,
+        close = true,
+        description = "A nice toolbox with stuff to repair your tire",
+        client = {
+            image = "tirekit.png",
+        },
+        server = {
+            export = 'vehiclehandler.tirekit'
+        }
+    },
 
     ["repairkit"] = {
         label = "Repairkit",
