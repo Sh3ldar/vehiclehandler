@@ -5,7 +5,7 @@ lua54       'yes'
 name        'Vehicle Handler'
 description 'Vehicle collision/damage handling for FiveM.'
 author      'QuantumMalice'
-version     '1.0.1'
+version     '1.1.0'
 
 files {
     'data/*.lua',

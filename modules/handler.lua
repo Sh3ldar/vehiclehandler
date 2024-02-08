@@ -2,11 +2,14 @@ local Progress = lib.load('data.progress')
 local Settings = lib.load('data.vehicle')
 local Handler = lib.class('vehiclehandler')
 
-function Handler:init()
-    self.private.active = false
-    self.private.limited = false
-    self.private.ox = GetResourceState('ox_fuel') == 'started' and true or false
-end
+local wheels <const> = {
+    [0] =   'wheel_lf',
+            'wheel_rf',
+            'wheel_lm',
+            'wheel_rm',
+            'wheel_lr',
+            'wheel_rr'
+}
 
 function Handler:isActive() return self.private.active end
 
@@ -19,6 +22,38 @@ function Handler:isValid()
     if cache.vehicle or IsPedInAnyPlane(cache.ped) then return true end
 
     return false
+end
+
+function Handler:isWheelBroken(vehicle, coords)
+    if not vehicle or not coords then return false end
+    
+    for k,v in pairs(wheels) do
+        local tire = GetEntityBoneIndexByName(vehicle, v)
+
+        if tire ~= -1 then
+            if IsVehicleTyreBurst(vehicle, k, true) then
+                local pos = GetWorldPositionOfEntityBone(vehicle, tire)
+
+                if #(coords - pos) < 2.0 then
+                    return true, tire
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+function Handler:getEngineData(vehicle)
+    if not vehicle or vehicle == 0 then return end
+    
+    local backengine = Settings.backengine[GetEntityModel(vehicle)]
+    local distance = backengine and -2.5 or 2.5
+    local offset = GetOffsetFromEntityInWorldCoords(vehicle, 0, distance, 0)
+    local index = backengine and 5 or 4
+    local health = GetVehicleEngineHealth(vehicle)
+
+    return backengine, offset, index, health
 end
 
 function Handler:setActive(state)
@@ -68,19 +103,8 @@ function Handler:adminfix()
     if not self:isValid() then return false end
 
     lib.callback('vehiclehandler:sync', -1, function()
-        SetVehicleUndriveable(cache.vehicle, false)
-        SetVehicleEngineHealth(cache.vehicle, 1000.0)
-        SetVehiclePetrolTankHealth(cache.vehicle, 1000.0)
-        SetVehicleBodyHealth(cache.vehicle, 1000.0)
-        SetVehicleDirtLevel(vehicle, 0.0)
-        ResetVehicleWheels(cache.vehicle, true)
-
-        for i = 0, 5 do
-            SetVehicleTyreFixed(cache.vehicle, i)
-            SetVehicleWheelHealth(cache.vehicle, i, 1000.0)
-        end
-
         SetVehicleFixed(cache.vehicle)
+        ResetVehicleWheels(cache.vehicle, true)
 
         if self:isFuelOx() then
             Entity(cache.vehicle).state.fuel = 100.0
@@ -89,6 +113,7 @@ function Handler:adminfix()
             DecorSetFloat(cache.vehicle, '_FUEL_LEVEL', GetVehicleFuelLevel(cache.vehicle))
         end
         
+        SetVehicleUndriveable(cache.vehicle, false)
         SetVehicleEngineOn(cache.vehicle, true, true)
     end)
 
@@ -110,11 +135,12 @@ function Handler:basicwash()
     TaskStartScenarioInPlace(cache.ped, "WORLD_HUMAN_MAID_CLEAN", 0, true)
 
     if lib.progressCircle(Progress['cleankit']) then
+        success = true
+        
         lib.callback('vehiclehandler:sync', -1, function()
             SetVehicleDirtLevel(vehicle, 0.0)
             WashDecalsFromVehicle(vehicle, 1.0)
         end)
-        success = true
     end
 
     ClearAllPedProps(cache.ped)
@@ -127,71 +153,88 @@ end
 
 function Handler:basicfix(fixtype)
     if not cache.ped then return false end
+    if not fixtype or type(fixtype) ~= 'string' then return false end
 
     local coords = GetEntityCoords(cache.ped)
     local vehicle,_ = lib.getClosestVehicle(coords, 3.0, false)
 	if vehicle == nil or vehicle == 0 then return false end
 
-    if GetVehicleEngineHealth(vehicle) < 500 then
-        local offset = GetOffsetFromEntityInWorldCoords(vehicle, 0, 2.5, 0)
-        local backengine = Settings.backengine[GetEntityModel(vehicle)]
+    if fixtype == 'tirekit' then
+        local found, tire = self:isWheelBroken(vehicle, coords)
 
-        if backengine then
-            offset = GetOffsetFromEntityInWorldCoords(vehicle, 0, -2.5, 0)
-        end
-
-        if #(coords - offset) < 2.0 then
+        if found then
+            local lastengine = GetVehicleEngineHealth(vehicle)
+            local lastbody = GetVehicleBodyHealth(vehicle)
+            local lasttank = GetVehiclePetrolTankHealth(vehicle)
+            local lastdirt = GetVehicleDirtLevel(vehicle)
             local success = false
-            local hoodindex = backengine and 5 or 4
 
             LocalPlayer.state:set("inv_busy", true, true)
-            SetVehicleDoorOpen(vehicle, hoodindex, false, false)
 
             if lib.progressCircle(Progress[fixtype]) then
                 success = true
 
                 lib.callback('vehiclehandler:sync', -1, function()
-                    local newhealth = fixtype == 'bigfix' and 1000.0 or 500.0
-            
-                    SetVehicleUndriveable(vehicle, false)
-                    SetVehicleEngineHealth(vehicle, newhealth)
-            
-                    if fixtype == 'bigfix' then
-                        SetVehiclePetrolTankHealth(vehicle, newhealth)
-                        SetVehicleBodyHealth(vehicle, newhealth)
-            
-                        for i = 0, 5 do
-                            SetVehicleTyreFixed(vehicle, i)
-                            SetVehicleWheelHealth(vehicle, i, newhealth)
-                        end
-                    end
+                    DeleteEntity(tire)
+                    SetVehicleFixed(vehicle)
+                    SetVehicleEngineHealth(vehicle, lastengine)
+                    SetVehicleBodyHealth(vehicle, lastbody)
+                    SetVehiclePetrolTankHealth(vehicle, lasttank)
+                    SetVehicleDirtLevel(vehicle, lastdirt)
                 end)
             end
 
-            SetVehicleDoorShut(vehicle, hoodindex, false)
             LocalPlayer.state:set("inv_busy", false, true)
 
-            if success then
-                CreateThread(function()
-                    Wait(1000)
-                    SetVehicleFixed(vehicle)
-                end)
-            end
-
             return success
-        else
-            if backengine then
-                lib.notify({
-                    title = 'Engine bay is in back',
-                    type = 'error'
-                })
-            end
         end
-    else
-        lib.notify({
-            title = 'Cannot repair any further',
-            type = 'error'
-        })
+    elseif fixtype == 'smallkit' or fixtype == 'bigkit' then
+        local backengine, offset, hoodindex, health = self:getEngineData(vehicle)
+
+        if fixtype == 'smallkit' and health < 500 or fixtype == 'bigkit' and health < 1000 then
+            if #(coords - offset) < 2.0 then
+                local success = false
+
+                LocalPlayer.state:set("inv_busy", true, true)
+                SetVehicleDoorOpen(vehicle, hoodindex, false, false)
+    
+                if lib.progressCircle(Progress[fixtype]) then
+                    success = true
+
+                    lib.callback('vehiclehandler:sync', -1, function()
+                        if fixtype == 'smallkit' then
+                            SetVehicleEngineHealth(vehicle, 500.0)
+                        end
+
+                        SetVehicleUndriveable(vehicle, false)
+                    end)
+                end
+    
+                SetVehicleDoorShut(vehicle, hoodindex, false)
+                LocalPlayer.state:set("inv_busy", false, true)
+    
+                if success and fixtype == 'bigkit' then
+                    CreateThread(function()
+                        Wait(1000)
+                        SetVehicleFixed(vehicle)
+                    end)
+                end
+    
+                return success
+            else
+                if backengine then
+                    lib.notify({
+                        title = 'Engine bay is in back',
+                        type = 'error'
+                    })
+                end
+            end
+        else
+            lib.notify({
+                title = 'Cannot repair vehicle any further',
+                type = 'error'
+            })
+        end
     end
 
     return false

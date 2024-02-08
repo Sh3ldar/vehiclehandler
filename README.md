@@ -6,7 +6,7 @@
 ➢ Prevents crazy handling from low fuel <br>
 ➢ Disables vehicle after heavy collisions <br>
 ➢ Disables controls while airborne/flipped <br>
-➢ Repair/Wash item integration <br>
+➢ Repair/Wash item integration (clean, tire, engine) <br>
 
 *Idle -* `0.0ms` <br>
 *Driving -* `0.0ms ~ 0.02ms` <br>
@@ -30,6 +30,20 @@
             export = 'vehiclehandler.cleaningkit'
         }
     },
+
+    ["tirekit"] = {
+		label = "Tire Kit",
+		weight = 250,
+		stack = true,
+		close = true,
+		description = "A nice toolbox with stuff to repair your tire",
+		client = {
+			image = "tirekit.png",
+		},
+		server = {
+			export = 'vehiclehandler.tirekit'
+		}
+	},
 
     ["repairkit"] = {
         label = "Repairkit",

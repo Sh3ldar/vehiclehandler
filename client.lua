@@ -1,4 +1,4 @@
-if not lib.checkDependency('ox_lib', '3.14.0') then print('ox_lib v3.14 or newer required!') return end
+if not lib.checkDependency('ox_lib', '3.14.0') then error('ox_lib v3.14 or newer required!') end
 
 local Handler = require 'modules.handler'
 local Settings = lib.load('data.vehicle')
@@ -94,7 +94,8 @@ local function startThreads(vehicle)
                 -- Handle wheel loss
                 if bodyDiff >= Settings.threshold.health then
                     local chance = math.random(0,1)
-                    BreakOffVehicleWheel(vehicle, chance, true, false, true, false)
+                    SetVehicleTyreBurst(vehicle, chance, true, 1000.0)
+                    BreakOffVehicleWheel(vehicle, chance, true, true, true, false)
                 end
 
                 -- Handle heavy impact
@@ -143,7 +144,12 @@ lib.callback.register('vehiclehandler:basicfix', function(fixtype)
 end)
 
 CreateThread(function()
-    Handler = Handler:new({ private = {} })
-    Wait(100)
+    Handler = Handler:new({ 
+        private = {
+            active = false,
+            limited = false,
+            ox = GetResourceState('ox_fuel') == 'started' and true or false
+        } 
+    })
     startThreads(cache.vehicle)
 end)

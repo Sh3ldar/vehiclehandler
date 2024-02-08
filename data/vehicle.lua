@@ -91,5 +91,5 @@ return {
         [`surfer`] = true,
         [`surfer2`] = true,
         [`comet3`] = true,
-    },
+    }
 }
