@@ -1,4 +1,8 @@
-if not lib.checkDependency('ox_lib', '3.14.0') then error('ox_lib v3.14 or newer required!') end
+if not lib.checkDependency('ox_lib', '3.16.2') then error('ox_lib v3.16.2 or newer required!') end
+
+if GetResourceState('ox_inventory') == 'started' then
+    if not lib.checkDependency('ox_inventory', '2.38.1') then error('ox_inventory v2.38.1 or newer required!') end
+end
 
 local Handler = require 'modules.handler'
 local Settings = lib.load('data.vehicle')
