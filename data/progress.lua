@@ -13,7 +13,7 @@ return {
         },
     },
     ['tirekit'] = {
-        label = "Repairing tire",
+        label = "Repairing tires",
         duration = math.random(10000, 20000),
         position = 'bottom',
         useWhileDead = false,

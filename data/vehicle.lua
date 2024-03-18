@@ -1,7 +1,8 @@
 return {
     units = 'mph' ,         -- (mph, kmh)
+    breaktire = true,       -- Enable/Disable breaking off vehicle wheel on impact
     threshold = {
-        health = 50.0,      -- Health difference needed to break off wheel (LastHealth - CurrentHealth)
+        tire  = 50.0,       -- Health difference needed to break off wheel (LastHealth - CurrentHealth)
         speed = 50.0,       -- Speed difference needed to trigger collision events (LastSpeed - CurrentSpeed)
         heavy = 90.0,       -- Speed difference needed for a heavy collision event (LastSpeed - CurrentSpeed)
     },

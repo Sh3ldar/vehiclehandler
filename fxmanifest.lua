@@ -2,10 +2,10 @@ fx_version  'cerulean'
 game        'gta5'
 lua54       'yes'
 
-name        'Vehicle Handler'
-description 'Vehicle collision/damage handling for FiveM.'
+name        'vehiclehandler'
+description 'Collision/damage handling for FiveM.'
 author      'QuantumMalice'
-version     '1.1.0'
+version     '1.1.1'
 
 files {
     'data/*.lua',

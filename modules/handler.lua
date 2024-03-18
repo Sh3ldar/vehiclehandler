@@ -1,8 +1,7 @@
 local Progress = lib.load('data.progress')
 local Settings = lib.load('data.vehicle')
-local Handler = lib.class('vehiclehandler')
 
-local wheels <const> = {
+local BONES <const> = {
     [0] =   'wheel_lf',
             'wheel_rf',
             'wheel_lm',
@@ -11,11 +10,20 @@ local wheels <const> = {
             'wheel_rr'
 }
 
+---@class Handler : OxClass
+---@field private private { active: boolean, limited: boolean, oxfuel: boolean }
+local Handler = lib.class('vehiclehandler')
+
+function Handler:constructor()
+    self:setActive(false)
+    self:setLimited(false)
+end
+
 function Handler:isActive() return self.private.active end
 
 function Handler:isLimited() return self.private.limited end
 
-function Handler:isFuelOx() return self.private.ox end
+function Handler:isFuelOx() return self.private.oxfuel end
 
 function Handler:isValid()
     if not cache.ped then return false end
@@ -27,15 +35,15 @@ end
 function Handler:isWheelBroken(vehicle, coords)
     if not vehicle or not coords then return false end
     
-    for k,v in pairs(wheels) do
-        local tire = GetEntityBoneIndexByName(vehicle, v)
+    for k,v in pairs(BONES) do
+        local bone = GetEntityBoneIndexByName(vehicle, v)
 
-        if tire ~= -1 then
+        if bone ~= -1 then
             if IsVehicleTyreBurst(vehicle, k, true) then
-                local pos = GetWorldPositionOfEntityBone(vehicle, tire)
+                local pos = GetWorldPositionOfEntityBone(vehicle, bone)
 
-                if #(coords - pos) < 2.0 then
-                    return true, tire
+                if #(coords - pos) < 2.5 then
+                    return true
                 end
             end
         end
@@ -58,13 +66,30 @@ end
 
 function Handler:setActive(state)
     if state ~= nil and type(state) == 'boolean' then
-        self.private.state = state
+        self.private.active = state
     end
 end
 
 function Handler:setLimited(state)
     if state ~= nil and type(state) == 'boolean' then
         self.private.limited = state
+    end
+end
+
+function Handler:breakTire(vehicle, index)
+    if vehicle == nil or type(vehicle) ~= 'number' then return end
+    if index == nil or type(index) ~= 'number' then return end
+
+    local bone = GetEntityBoneIndexByName(vehicle, BONES[index])
+
+    if bone ~= -1 then
+        if not IsVehicleTyreBurst(vehicle, index, true) then
+
+            lib.callback('vehiclehandler:sync', -1, function()
+                SetVehicleTyreBurst(vehicle, index, true, 1000.0)
+                BreakOffVehicleWheel(vehicle, index, true, true, true, false)
+            end)
+        end
     end
 end
 
@@ -114,7 +139,7 @@ function Handler:adminfix()
         end
         
         SetVehicleUndriveable(cache.vehicle, false)
-        SetVehicleEngineOn(cache.vehicle, true, true)
+        SetVehicleEngineOn(cache.vehicle, true, true, true)
     end)
 
     return true
@@ -160,7 +185,7 @@ function Handler:basicfix(fixtype)
 	if vehicle == nil or vehicle == 0 then return false end
 
     if fixtype == 'tirekit' then
-        local found, tire = self:isWheelBroken(vehicle, coords)
+        local found = self:isWheelBroken(vehicle, coords)
 
         if found then
             local lastengine = GetVehicleEngineHealth(vehicle)
@@ -175,7 +200,6 @@ function Handler:basicfix(fixtype)
                 success = true
 
                 lib.callback('vehiclehandler:sync', -1, function()
-                    DeleteEntity(tire)
                     SetVehicleFixed(vehicle)
                     SetVehicleEngineHealth(vehicle, lastengine)
                     SetVehicleBodyHealth(vehicle, lastbody)
@@ -196,7 +220,10 @@ function Handler:basicfix(fixtype)
                 local success = false
 
                 LocalPlayer.state:set("inv_busy", true, true)
-                SetVehicleDoorOpen(vehicle, hoodindex, false, false)
+
+                if hoodindex then
+                    SetVehicleDoorOpen(vehicle, hoodindex, false, false)
+                end
     
                 if lib.progressCircle(Progress[fixtype]) then
                     success = true
@@ -210,7 +237,10 @@ function Handler:basicfix(fixtype)
                     end)
                 end
     
-                SetVehicleDoorShut(vehicle, hoodindex, false)
+                if hoodindex then
+                    SetVehicleDoorShut(vehicle, hoodindex, false)
+                end
+                
                 LocalPlayer.state:set("inv_busy", false, true)
     
                 if success and fixtype == 'bigkit' then

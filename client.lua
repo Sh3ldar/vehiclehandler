@@ -1,17 +1,20 @@
-if not lib.checkDependency('ox_lib', '3.16.2') then error('ox_lib v3.16.2 or newer required!') end
+local ox_lib, msg_lib = lib.checkDependency('ox_lib', '3.17.0')
+if not ox_lib then print(msg_lib) return end
 
 if GetResourceState('ox_inventory') == 'started' then
-    if not lib.checkDependency('ox_inventory', '2.38.1') then error('ox_inventory v2.38.1 or newer required!') end
+    local ox_inv, msg_inv = lib.checkDependency('ox_inventory', '2.39.1')
+    if not ox_inv then print(msg_inv) return end
 end
 
-local Handler = require 'modules.handler'
+local Class = require 'modules.handler'
 local Settings = lib.load('data.vehicle')
 
+local Handler = nil
 local speedUnit = Settings.units == 'mph' and 2.23694 or 3.6
 
 local function startThreads(vehicle)
     if not vehicle then return end
-    if Handler:isActive() then return end
+    if not Handler or Handler:isActive() then return end
 
     Handler:setActive(true)
 
@@ -19,7 +22,7 @@ local function startThreads(vehicle)
     local speedBuffer, healthBuffer, bodyBuffer, roll, airborne = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0, false
     
     CreateThread(function()
-        while cache.vehicle and cache.seat == -1 do
+        while (cache.vehicle == vehicle) and (cache.seat == -1) do
 
             -- Retrieve latest vehicle data
             bodyBuffer[1] = GetVehicleBodyHealth(vehicle)
@@ -40,7 +43,7 @@ local function startThreads(vehicle)
                     Handler:setLimited(true)
                     
                     CreateThread(function()
-                        while cache.vehicle and healthBuffer[1] < 500 do
+                        while (cache.vehicle == vehicle) and (healthBuffer[1] < 500) do
                             local newtorque = (healthBuffer[1] + 500) / 1100
                             SetVehicleCheatPowerIncrease(vehicle, newtorque)
                             Wait(1)
@@ -96,10 +99,11 @@ local function startThreads(vehicle)
             if speedDiff >= Settings.threshold.speed then
 
                 -- Handle wheel loss
-                if bodyDiff >= Settings.threshold.health then
-                    local chance = math.random(0,1)
-                    SetVehicleTyreBurst(vehicle, chance, true, 1000.0)
-                    BreakOffVehicleWheel(vehicle, chance, true, true, true, false)
+                if Settings.breaktire then
+                    if bodyDiff >= Settings.threshold.tire then
+                        math.randomseed(GetGameTimer())
+                        Handler:breakTire(vehicle, math.random(0, 1))
+                    end
                 end
 
                 -- Handle heavy impact
@@ -118,6 +122,12 @@ local function startThreads(vehicle)
         end
 
         Handler:setActive(false)
+
+        -- Retrigger thread if admin spawns a new vehicle while in one
+        if cache.vehicle and cache.seat == -1 then
+            if Handler:isLimited() then Handler:setLimited(false) end
+            startThreads(cache.vehicle)
+        end
     end)
 end
 
@@ -128,32 +138,36 @@ lib.onCache('seat', function(seat)
 end)
 
 lib.callback.register('vehiclehandler:adminfuel', function(newlevel)
+    if not Handler or not Handler:isActive() then return end
     return Handler:adminfuel(newlevel)
 end)
 
 lib.callback.register('vehiclehandler:adminwash', function()
+    if not Handler or not Handler:isActive() then return end
     return Handler:adminwash()
 end)
 
 lib.callback.register('vehiclehandler:adminfix', function()
+    if not Handler or not Handler:isActive() then return end
     return Handler:adminfix()
 end)
 
-lib.callback.register('vehiclehandler:wash', function()
+lib.callback.register('vehiclehandler:basicwash', function()
+    if not Handler then return end
     return Handler:basicwash()
 end)
 
 lib.callback.register('vehiclehandler:basicfix', function(fixtype)
+    if not fixtype or type(fixtype) ~= 'string' then return end
+    if not Handler then return end
     return Handler:basicfix(fixtype)
 end)
 
 CreateThread(function()
-    Handler = Handler:new({ 
+    Handler = Class:new({
         private = {
-            active = false,
-            limited = false,
-            ox = GetResourceState('ox_fuel') == 'started' and true or false
-        } 
+            oxfuel = GetResourceState('ox_fuel') == 'started' and true or false
+        }
     })
     startThreads(cache.vehicle)
 end)
