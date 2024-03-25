@@ -8,9 +8,7 @@ end
 
 local Class = require 'modules.handler'
 local Settings = lib.load('data.vehicle')
-
 local Handler = nil
-local speedUnit = Settings.units == 'mph' and 2.23694 or 3.6
 
 local function startThreads(vehicle)
     if not vehicle then return end
@@ -18,19 +16,21 @@ local function startThreads(vehicle)
 
     Handler:setActive(true)
 
+    local oxfuel = Handler:isFuelOx()
+    local units = Handler:getUnits()
     local class = GetVehicleClass(vehicle) or false
     local speedBuffer, healthBuffer, bodyBuffer, roll, airborne = {0.0,0.0}, {0.0,0.0}, {0.0,0.0}, 0.0, false
-    
+
     CreateThread(function()
         while (cache.vehicle == vehicle) and (cache.seat == -1) do
 
             -- Retrieve latest vehicle data
             bodyBuffer[1] = GetVehicleBodyHealth(vehicle)
             healthBuffer[1] = GetVehicleEngineHealth(vehicle)
-            speedBuffer[1] = GetEntitySpeed(vehicle) * speedUnit
+            speedBuffer[1] = GetEntitySpeed(vehicle) * units
 
             -- Driveability handler (health, fuel)
-            local fuelLevel = GetVehicleFuelLevel(vehicle)
+            local fuelLevel = oxfuel and Entity(vehicle).state.fuel or GetVehicleFuelLevel(vehicle)
             if healthBuffer[1] <= 0 or fuelLevel <= 6.4 then
                 if IsVehicleDriveable(vehicle, true) then
                     SetVehicleUndriveable(vehicle, true)
@@ -41,14 +41,14 @@ local function startThreads(vehicle)
             if not Handler:isLimited() then
                 if healthBuffer[1] < 500 then
                     Handler:setLimited(true)
-                    
+
                     CreateThread(function()
                         while (cache.vehicle == vehicle) and (healthBuffer[1] < 500) do
                             local newtorque = (healthBuffer[1] + 500) / 1100
                             SetVehicleCheatPowerIncrease(vehicle, newtorque)
                             Wait(1)
                         end
-            
+
                         Handler:setLimited(false)
                     end)
                 end
@@ -164,10 +164,6 @@ lib.callback.register('vehiclehandler:basicfix', function(fixtype)
 end)
 
 CreateThread(function()
-    Handler = Class:new({
-        private = {
-            oxfuel = GetResourceState('ox_fuel') == 'started' and true or false
-        }
-    })
+    Handler = Class:new()
     startThreads(cache.vehicle)
 end)

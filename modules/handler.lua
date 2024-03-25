@@ -11,12 +11,14 @@ local BONES <const> = {
 }
 
 ---@class Handler : OxClass
----@field private private { active: boolean, limited: boolean, oxfuel: boolean }
+---@field private private { active: boolean, limited: boolean, oxfuel: boolean, units: number }
 local Handler = lib.class('vehiclehandler')
 
 function Handler:constructor()
     self:setActive(false)
     self:setLimited(false)
+    self.private.oxfuel = GetResourceState('ox_fuel') == 'started' and true or false
+    self.private.units = Settings.units == 'mph' and 2.23694 or 3.6
 end
 
 function Handler:isActive() return self.private.active end
@@ -24,6 +26,8 @@ function Handler:isActive() return self.private.active end
 function Handler:isLimited() return self.private.limited end
 
 function Handler:isFuelOx() return self.private.oxfuel end
+
+function Handler:getUnits() return self.private.units end
 
 function Handler:isValid()
     if not cache.ped then return false end
@@ -34,7 +38,7 @@ end
 
 function Handler:isWheelBroken(vehicle, coords)
     if not vehicle or not coords then return false end
-    
+
     for k,v in pairs(BONES) do
         local bone = GetEntityBoneIndexByName(vehicle, v)
 
@@ -54,7 +58,7 @@ end
 
 function Handler:getEngineData(vehicle)
     if not vehicle or vehicle == 0 then return end
-    
+
     local backengine = Settings.backengine[GetEntityModel(vehicle)]
     local distance = backengine and -2.5 or 2.5
     local offset = GetOffsetFromEntityInWorldCoords(vehicle, 0, distance, 0)
@@ -85,7 +89,7 @@ function Handler:breakTire(vehicle, index)
     if bone ~= -1 then
         if not IsVehicleTyreBurst(vehicle, index, true) then
 
-            lib.callback('vehiclehandler:sync', -1, function()
+            lib.callback('vehiclehandler:sync', false, function()
                 SetVehicleTyreBurst(vehicle, index, true, 1000.0)
                 BreakOffVehicleWheel(vehicle, index, true, true, true, false)
             end)
@@ -97,17 +101,18 @@ function Handler:adminfuel(newlevel)
     if not self:isValid() then return false end
     if not newlevel then return false end
 
-    newlevel = tonumber(newlevel) + 0.0
-    if newlevel < 0.0 then return false end
-    if newlevel > 100.0 then newlevel = 100.0 end
+    newlevel = lib.math.clamp(newlevel, 0.0, 100.0)
 
-    lib.callback('vehiclehandler:sync', -1, function()
+    lib.callback('vehiclehandler:sync', false, function()
         if self:isFuelOx() then
             Entity(cache.vehicle).state.fuel = newlevel
-        else
-            SetVehicleFuelLevel(cache.vehicle, newlevel)
-            DecorSetFloat(cache.vehicle, '_FUEL_LEVEL', GetVehicleFuelLevel(cache.vehicle))
         end
+
+        SetVehicleFuelLevel(cache.vehicle, newlevel)
+        DecorSetFloat(cache.vehicle, '_FUEL_LEVEL', GetVehicleFuelLevel(cache.vehicle))
+
+        SetVehicleUndriveable(cache.vehicle, false)
+        SetVehicleEngineOn(cache.vehicle, true, true, true)
     end)
 
     return true
@@ -116,7 +121,7 @@ end
 function Handler:adminwash()
     if not self:isValid() then return false end
 
-    lib.callback('vehiclehandler:sync', -1, function()
+    lib.callback('vehiclehandler:sync', false, function()
         SetVehicleDirtLevel(cache.vehicle, 0.0)
         WashDecalsFromVehicle(cache.vehicle, 1.0)
     end)
@@ -127,17 +132,17 @@ end
 function Handler:adminfix()
     if not self:isValid() then return false end
 
-    lib.callback('vehiclehandler:sync', -1, function()
+    lib.callback('vehiclehandler:sync', false, function()
         SetVehicleFixed(cache.vehicle)
         ResetVehicleWheels(cache.vehicle, true)
 
         if self:isFuelOx() then
             Entity(cache.vehicle).state.fuel = 100.0
-        else
-            SetVehicleFuelLevel(cache.vehicle, 100.0)
-            DecorSetFloat(cache.vehicle, '_FUEL_LEVEL', GetVehicleFuelLevel(cache.vehicle))
         end
-        
+
+        SetVehicleFuelLevel(cache.vehicle, 100.0)
+        DecorSetFloat(cache.vehicle, '_FUEL_LEVEL', GetVehicleFuelLevel(cache.vehicle))
+
         SetVehicleUndriveable(cache.vehicle, false)
         SetVehicleEngineOn(cache.vehicle, true, true, true)
     end)
@@ -161,8 +166,8 @@ function Handler:basicwash()
 
     if lib.progressCircle(Progress['cleankit']) then
         success = true
-        
-        lib.callback('vehiclehandler:sync', -1, function()
+
+        lib.callback('vehiclehandler:sync', false, function()
             SetVehicleDirtLevel(vehicle, 0.0)
             WashDecalsFromVehicle(vehicle, 1.0)
         end)
@@ -199,7 +204,7 @@ function Handler:basicfix(fixtype)
             if lib.progressCircle(Progress[fixtype]) then
                 success = true
 
-                lib.callback('vehiclehandler:sync', -1, function()
+                lib.callback('vehiclehandler:sync', false, function()
                     SetVehicleFixed(vehicle)
                     SetVehicleEngineHealth(vehicle, lastengine)
                     SetVehicleBodyHealth(vehicle, lastbody)
@@ -224,11 +229,11 @@ function Handler:basicfix(fixtype)
                 if hoodindex then
                     SetVehicleDoorOpen(vehicle, hoodindex, false, false)
                 end
-    
+
                 if lib.progressCircle(Progress[fixtype]) then
                     success = true
 
-                    lib.callback('vehiclehandler:sync', -1, function()
+                    lib.callback('vehiclehandler:sync', false, function()
                         if fixtype == 'smallkit' then
                             SetVehicleEngineHealth(vehicle, 500.0)
                         end
@@ -236,20 +241,20 @@ function Handler:basicfix(fixtype)
                         SetVehicleUndriveable(vehicle, false)
                     end)
                 end
-    
+
                 if hoodindex then
                     SetVehicleDoorShut(vehicle, hoodindex, false)
                 end
-                
+
                 LocalPlayer.state:set("inv_busy", false, true)
-    
+
                 if success and fixtype == 'bigkit' then
                     CreateThread(function()
                         Wait(1000)
                         SetVehicleFixed(vehicle)
                     end)
                 end
-    
+
                 return success
             else
                 if backengine then
